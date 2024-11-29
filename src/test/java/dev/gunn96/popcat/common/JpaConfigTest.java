@@ -2,6 +2,8 @@ package dev.gunn96.popcat.common;
 
 import dev.gunn96.popcat.entity.VisitorPopEntity;
 import dev.gunn96.popcat.repository.VisitorPopRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +47,9 @@ class JpaConfigTest {
     @Autowired
     private VisitorPopRepository visitorPopRepository;
 
+    @Autowired
+    private EntityManager entityManager;
+
     @Test
     @DisplayName("엔티티 생성 시 생성일시와 수정일시가 자동 설정됨")
     void createAuditingTest() {
@@ -66,6 +71,7 @@ class JpaConfigTest {
 
     @Test
     @DisplayName("엔티티 수정 시 수정일시만 업데이트됨")
+    @Transactional
     void updateAuditingTest() throws InterruptedException {
         // given
         VisitorPopEntity visitorPop = VisitorPopEntity.builder()
@@ -75,6 +81,11 @@ class JpaConfigTest {
                 .build();
 
         VisitorPopEntity saved = visitorPopRepository.save(visitorPop);
+        entityManager.flush();
+        entityManager.clear();  // 영속성 컨텍스트 초기화
+
+        saved = visitorPopRepository.findById(new VisitorPopEntity.VisitorPopId(saved.getIpAddress(), saved.getRegionCode()))
+                .orElseThrow();
         LocalDateTime createdAt = saved.getCreatedAt();
         LocalDateTime updatedAt = saved.getUpdatedAt();
 
@@ -83,6 +94,8 @@ class JpaConfigTest {
         // when
         saved.updateCount(100); // 엔티티의 상태를 변경
         VisitorPopEntity result = visitorPopRepository.save(saved);
+        entityManager.flush();
+        entityManager.refresh(result);  // 엔티티 상태 새로고침
 
         // then
         assertThat(result.getCreatedAt()).isEqualTo(createdAt);
