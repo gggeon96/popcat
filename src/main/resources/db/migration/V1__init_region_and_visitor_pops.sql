@@ -3,7 +3,8 @@ CREATE TABLE region_pops (
                              region_code VARCHAR(10) PRIMARY KEY,
                              count BIGINT NOT NULL DEFAULT 0,
                              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                             is_deleted BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- 방문자별 클릭수를 저장하는 테이블
@@ -13,6 +14,7 @@ CREATE TABLE visitor_pops (
                               count BIGINT NOT NULL DEFAULT 0,
                               created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                               updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                              is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
                               PRIMARY KEY (ip_address, region_code)
 );
 
