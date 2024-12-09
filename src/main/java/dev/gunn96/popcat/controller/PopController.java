@@ -25,11 +25,16 @@ public class PopController {
             @RequestParam("count") Long count,
             @AuthenticationPrincipal TokenClaims claims
     ) {
-        log.info("Add pops with count {}", count);
-        PopResponse response = popService.addPops(claims.audience(), claims.subject(), count);
-        log.info("response: {}", response);
+        log.info("Add pops with count {} for IP {} and region {}",
+                count, claims.ipAddress(), claims.regionCode());
+        PopResponse response = popService.addPops(
+                claims.ipAddress(),
+                claims.regionCode(),
+                count
+        );
         return ApiResponse.success(response);
     }
+
 }
 
 

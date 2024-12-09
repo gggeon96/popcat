@@ -1,6 +1,5 @@
 package dev.gunn96.popcat.security.jwt;
 
-import dev.gunn96.popcat.service.GeoIpService;
 import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,14 +20,12 @@ class JwtAuthenticationProviderTest {
 
     @Mock
     private JwtProvider jwtProvider;
-    @Mock
-    private GeoIpService geoIpService;
 
     private JwtAuthenticationProvider authenticationProvider;
 
     @BeforeEach
     void setUp() {
-        authenticationProvider = new JwtAuthenticationProvider(jwtProvider, geoIpService);
+        authenticationProvider = new JwtAuthenticationProvider(jwtProvider);
     }
 
     @Test
@@ -41,17 +38,15 @@ class JwtAuthenticationProviderTest {
         TokenClaims expectedClaims = TokenClaims.builder()
                 .id("id")
                 .issuer("issuer")
-                .audience(ipAddress)
-                .subject(regionCode)
+                .ipAddress(ipAddress)
+                .regionCode(regionCode)
                 .issuedAt(0)
                 .notBefore(0)
                 .expiresAt(0)
                 .build();
 
         JwtAuthenticationToken authRequest = new JwtAuthenticationToken(token, ipAddress);
-
-        given(geoIpService.findRegionCodeByIpAddress(ipAddress)).willReturn(regionCode);
-        given(jwtProvider.validateToken(token, ipAddress, regionCode)).willReturn(expectedClaims);
+        given(jwtProvider.validateToken(token, ipAddress)).willReturn(expectedClaims);
 
         // when
         Authentication result = authenticationProvider.authenticate(authRequest);
@@ -72,8 +67,7 @@ class JwtAuthenticationProviderTest {
         String regionCode = "KR";
         JwtAuthenticationToken authRequest = new JwtAuthenticationToken(token, ipAddress);
 
-        given(geoIpService.findRegionCodeByIpAddress(ipAddress)).willReturn(regionCode);
-        given(jwtProvider.validateToken(token, ipAddress, regionCode))
+        given(jwtProvider.validateToken(token, ipAddress))
                 .willThrow(new JwtException("Invalid token")); // 여기를 수정
 
         // when & then

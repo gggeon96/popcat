@@ -1,7 +1,10 @@
 package dev.gunn96.popcat.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.gunn96.popcat.security.jwt.JwtAuthenticationFilter;
 import dev.gunn96.popcat.security.jwt.JwtAuthenticationProvider;
+import dev.gunn96.popcat.security.jwt.JwtProvider;
+import dev.gunn96.popcat.service.GeoIpService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,10 +23,23 @@ public class SecurityConfig {
     private final JwtAuthenticationProvider jwtAuthenticationProvider;
 
     @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter(
+            AuthenticationConfiguration authConfig,
+            JwtProvider jwtProvider,
+            GeoIpService geoIpService,
+            ObjectMapper objectMapper) throws Exception {
+        return new JwtAuthenticationFilter(
+                authConfig.getAuthenticationManager(),
+                jwtProvider,
+                geoIpService,
+                objectMapper
+        );
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                                   AuthenticationConfiguration authConfig) throws Exception {
-        JwtAuthenticationFilter jwtAuthenticationFilter =
-                new JwtAuthenticationFilter(authConfig.getAuthenticationManager());
+                                                   JwtAuthenticationProvider jwtAuthenticationProvider,
+                                                   JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
 
         return http
                 .csrf(AbstractHttpConfigurer::disable)

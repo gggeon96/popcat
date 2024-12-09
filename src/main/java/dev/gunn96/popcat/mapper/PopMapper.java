@@ -38,7 +38,7 @@ public class PopMapper {
                 .build();
     }
 
-    public PopResponse toResponse(long countAppend, String newToken) {
-        return new PopResponse(countAppend, newToken);
+    public PopResponse toResponse(long countAppend, String newToken, boolean isProcessed) {
+        return new PopResponse(countAppend, newToken, isProcessed);
     }
 }

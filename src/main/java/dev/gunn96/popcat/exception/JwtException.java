@@ -24,4 +24,5 @@ public class JwtException extends RuntimeException {
             super(message, cause);
         }
     }
+
 }
