@@ -1,9 +1,18 @@
 package dev.gunn96.popcat.security.jwt;
 
 import dev.gunn96.popcat.exception.JwtException;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Date;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -11,6 +20,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class JwtProviderTest {
 
     private JwtProvider jwtProvider;
+    private SecretKey key;
+    private String serverIdentifier;
+
     private static final String SECRET = "thisIsTestSecretKeyForJwtProviderTestthisIsTestSecretKeyForJwtProviderTest";
     private static final String SERVER_ADDRESS = "127.0.0.1:50001";
     private static final String IP_ADDRESS = "127.0.0.1";
@@ -20,7 +32,12 @@ class JwtProviderTest {
     @BeforeEach
     void setUp() {
         jwtProvider = new JwtProvider(SECRET, SERVER_ADDRESS, EXPIRATION_SECONDS);
+        key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+        serverIdentifier = UUID.nameUUIDFromBytes(
+                (SERVER_ADDRESS + SECRET).getBytes(StandardCharsets.UTF_8)
+        ).toString();
     }
+
 
     @Test
     @DisplayName("토큰 생성 성공")
@@ -39,19 +56,12 @@ class JwtProviderTest {
         String token = jwtProvider.generateToken(IP_ADDRESS, REGION_CODE);
 
         // when
-        TokenClaims claims = jwtProvider.validateToken(token, IP_ADDRESS, REGION_CODE);
+        TokenClaims claims = jwtProvider.validateToken(token, IP_ADDRESS);
 
         // then
         assertThat(claims).isNotNull();
-        assertThat(claims.audience()).isEqualTo(IP_ADDRESS);
-        assertThat(claims.subject()).isEqualTo(REGION_CODE);
-    }
-
-    @Test
-    @DisplayName("빈 토큰 검증 실패")
-    void validateToken_EmptyToken() {
-        assertThatThrownBy(() -> jwtProvider.validateToken("", IP_ADDRESS, REGION_CODE))
-                .isInstanceOf(JwtException.EmptyTokenException.class);
+        assertThat(claims.ipAddress()).isEqualTo(IP_ADDRESS);
+        assertThat(claims.regionCode()).isEqualTo(REGION_CODE);
     }
 
     @Test
@@ -62,33 +72,30 @@ class JwtProviderTest {
         String wrongIp = "192.168.0.1";
 
         // when, then
-        assertThatThrownBy(() -> jwtProvider.validateToken(token, wrongIp, REGION_CODE))
+        assertThatThrownBy(() -> jwtProvider.validateToken(token, wrongIp))
                 .isInstanceOf(JwtException.InvalidTokenException.class);
     }
 
-    @Test
-    @DisplayName("잘못된 Region으로 토큰 검증 실패")
-    void validateToken_WrongRegion() {
-        // given
-        String token = jwtProvider.generateToken(IP_ADDRESS, REGION_CODE);
-        String wrongRegion = "US";
-
-        // when, then
-        assertThatThrownBy(() -> jwtProvider.validateToken(token, IP_ADDRESS, wrongRegion))
-                .isInstanceOf(JwtException.InvalidTokenException.class);
-    }
 
     @Test
     @DisplayName("만료된 토큰 검증 실패")
-    void validateToken_ExpiredToken() throws InterruptedException {
+    void validateToken_ExpiredToken_ThrowsException() {
         // given
-        String token = jwtProvider.generateToken(IP_ADDRESS, REGION_CODE);
+        Instant now = Instant.now();
+        String token = Jwts.builder()
+                .id(UUID.randomUUID().toString())
+                .issuer(serverIdentifier)
+                .audience().add(IP_ADDRESS).and()
+                .subject(REGION_CODE)
+                .issuedAt(Date.from(now.minusSeconds(10)))
+                .notBefore(Date.from(now.minusSeconds(10)))
+                .expiration(Date.from(now.minusSeconds(5)))  // 5초 전에 만료된 토큰
+                .signWith(key)
+                .compact();
 
-        // 토큰 만료 대기 (1.1초)
-        Thread.sleep(1100);
-
-        // when, then
-        assertThatThrownBy(() -> jwtProvider.validateToken(token, IP_ADDRESS, REGION_CODE))
-                .isInstanceOf(JwtException.InvalidTokenException.class);
+        // when & then
+        assertThatThrownBy(() -> jwtProvider.validateToken(token, IP_ADDRESS))
+                .isInstanceOf(ExpiredJwtException.class)
+                .hasMessageContaining("expired");
     }
 }

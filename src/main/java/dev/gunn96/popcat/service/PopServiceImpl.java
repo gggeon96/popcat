@@ -32,7 +32,7 @@ public class PopServiceImpl implements PopService {
         updateRegionPop(regionCode, validCount);
         String newToken = jwtProvider.generateToken(ipAddress, regionCode);
 
-        return popMapper.toResponse(validCount, newToken);
+        return popMapper.toResponse(validCount, newToken, true);
     }
 
     // 방문자 팝 업데이트

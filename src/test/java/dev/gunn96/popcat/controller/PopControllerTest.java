@@ -8,28 +8,29 @@ import dev.gunn96.popcat.security.jwt.JwtProvider;
 import dev.gunn96.popcat.security.jwt.TokenClaims;
 import dev.gunn96.popcat.service.GeoIpService;
 import dev.gunn96.popcat.service.PopService;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.core.Authentication;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Collections;
 
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = PopController.class)
+
+@WebMvcTest(PopController.class)
 @Import(SecurityConfig.class)
-public class PopControllerTest {
+class PopControllerTest {
+
     @Autowired
     private MockMvc mvc;
 
@@ -45,46 +46,51 @@ public class PopControllerTest {
     @MockitoBean
     private JwtAuthenticationProvider jwtAuthenticationProvider;
 
-    @MockitoBean
-    private AuthenticationManager authenticationManager;
-
-    @BeforeEach
-    void setUp() {
-        given(authenticationManager.authenticate(any()))
-                .willAnswer(invocation -> {
-                    Authentication auth = invocation.getArgument(0);
-                    return new JwtAuthenticationToken(
-                            TokenClaims.builder()
-                                    .audience("127.0.0.1")
-                                    .subject("KR")
-                                    .build(),
-                            "127.0.0.1",
-                            Collections.emptyList()
-                    );
-                });
-    }
-
     @Test
     @DisplayName("유효한 pop요청시 성공적으로 popResponse반환")
-    public void testPopApi() throws Exception {
+    void testPopApi() throws Exception {
         // given
         long count = 10L;
-        String newToken = "new.jwt.token";
-        PopResponse response = PopResponse.builder()
-                .countAppend(count)
-                .newToken(newToken)
+        String ipAddress = "127.0.0.1";
+        String regionCode = "KR";
+        String token = "valid.jwt.token";
+
+        TokenClaims claims = TokenClaims.builder()
+                .id("test-id")
+                .issuer("test-issuer")
+                .ipAddress(ipAddress)
+                .regionCode(regionCode)
+                .issuedAt(0L)
+                .notBefore(0L)
+                .expiresAt(999999999L)
                 .build();
 
-        given(popService.addPops(anyString(), anyString(), anyLong()))
-                .willReturn(response);
+        PopResponse response = PopResponse.builder()
+                .countAppend(count)
+                .newToken("new.jwt.token")
+                .isProcessed(true)
+                .build();
+
+        // Mock JWT validation and authentication
+        JwtAuthenticationToken authRequest = new JwtAuthenticationToken(token, ipAddress);
+        JwtAuthenticationToken authResult = new JwtAuthenticationToken(claims, ipAddress, Collections.emptyList());
+
+        given(jwtAuthenticationProvider.supports(JwtAuthenticationToken.class)).willReturn(true);
+        given(jwtAuthenticationProvider.authenticate(any(JwtAuthenticationToken.class))).willReturn(authResult);
+
+        given(jwtProvider.validateToken(anyString(), anyString())).willReturn(claims);
+        given(geoIpService.findRegionCodeByIpAddress(anyString())).willReturn(regionCode);
+        given(popService.addPops(anyString(), anyString(), any(Long.class))).willReturn(response);
 
         // when & then
         mvc.perform(post("/api/v1/pop")
-                        .param("count", String.valueOf(count))
-                        .header("Authorization", "Bearer test.jwt.token"))
+                        .header("Authorization", "Bearer " + token)
+                        .param("count", String.valueOf(count)))
+                .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.countAppend").value(count))
-                .andExpect(jsonPath("$.data.newToken").value(newToken));
+                .andExpect(jsonPath("$.data.newToken").value("new.jwt.token"))
+                .andExpect(jsonPath("$.data.isProcessed").value(true));
     }
 }

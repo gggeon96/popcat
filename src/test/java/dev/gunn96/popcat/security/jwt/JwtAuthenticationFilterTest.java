@@ -1,5 +1,9 @@
 package dev.gunn96.popcat.security.jwt;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.gunn96.popcat.common.ApiResponse;
+import dev.gunn96.popcat.dto.response.PopResponse;
+import dev.gunn96.popcat.service.GeoIpService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,37 +14,62 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class JwtAuthenticationFilterTest {
 
     @Mock
     private AuthenticationManager authenticationManager;
+
+    @Mock
+    private JwtProvider jwtProvider;
+
+    @Mock
+    private GeoIpService geoIpService;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
     @Mock
     private HttpServletRequest request;
+
     @Mock
     private HttpServletResponse response;
+
     @Mock
     private FilterChain filterChain;
+
+    @Mock
+    private PrintWriter writer;
 
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @BeforeEach
     void setUp() {
-        jwtAuthenticationFilter = new JwtAuthenticationFilter(authenticationManager);
+        jwtAuthenticationFilter = new JwtAuthenticationFilter(
+                authenticationManager,
+                jwtProvider,
+                geoIpService,
+                objectMapper
+        );
         SecurityContextHolder.clearContext();
     }
+
 
     @Test
     @DisplayName("유효한 Bearer 토큰으로 인증 성공")
@@ -54,8 +83,8 @@ class JwtAuthenticationFilterTest {
         TokenClaims claims = TokenClaims.builder()
                 .id("id")
                 .issuer("issuer")
-                .audience(ipAddress)
-                .subject(regionCode)
+                .ipAddress(ipAddress)
+                .regionCode(regionCode)
                 .issuedAt(0)
                 .notBefore(0)
                 .expiresAt(0)
@@ -77,38 +106,37 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("Authorization 헤더가 없는 경우 인증 건너뛰기")
-    void doFilterInternal_NoAuthorizationHeader() throws ServletException, IOException {
+    @DisplayName("토큰이 없는 경우 새 토큰 발급")
+    void doFilterInternal_NoToken() throws ServletException, IOException {
         // given
+        String ipAddress = "127.0.0.1";
+        String regionCode = "KR";
+        String newToken = "new.token";
+
         given(request.getHeader("Authorization")).willReturn(null);
+        given(request.getHeader("X-Forwarded-For")).willReturn(ipAddress);
+        given(geoIpService.findRegionCodeByIpAddress(ipAddress)).willReturn(regionCode);
+        given(jwtProvider.generateToken(ipAddress, regionCode)).willReturn(newToken);
+        given(response.getWriter()).willReturn(writer);
 
         // when
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 
         // then
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(filterChain).doFilter(request, response);
+        verify(response).setContentType(MediaType.APPLICATION_JSON_VALUE);
+        verify(objectMapper).writeValue(any(PrintWriter.class), argThat(response ->
+                response instanceof ApiResponse && ((ApiResponse<?>) response).getData() instanceof PopResponse
+                        && ((PopResponse) ((ApiResponse<?>) response).getData()).isProcessed() == false
+        ));
+        verifyNoInteractions(filterChain);
     }
 
-    @Test
-    @DisplayName("Bearer 토큰이 아닌 경우 인증 건너뛰기")
-    void doFilterInternal_NotBearerToken() throws ServletException, IOException {
-        // given
-        given(request.getHeader("Authorization")).willReturn("Basic abc123");
-
-        // when
-        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
-
-        // then
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(filterChain).doFilter(request, response);
-    }
 
     @Test
-    @DisplayName("인증 실패시 SecurityContext가 초기화되는지 확인")
-    void doFilterInternal_AuthenticationFails_ClearsSecurityContext() throws ServletException, IOException {
+    @DisplayName("유효하지 않은 토큰의 경우 401 에러 반환")
+    void doFilterInternal_InvalidToken() throws ServletException, IOException {
         // given
-        String token = "invalid.jwt.token";
+        String token = "invalid.token";
         String bearerToken = "Bearer " + token;
         String ipAddress = "127.0.0.1";
 
@@ -116,12 +144,17 @@ class JwtAuthenticationFilterTest {
         given(request.getHeader("X-Forwarded-For")).willReturn(ipAddress);
         given(authenticationManager.authenticate(any(JwtAuthenticationToken.class)))
                 .willThrow(new BadCredentialsException("Invalid token"));
+        given(response.getWriter()).willReturn(writer);
 
         // when
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 
         // then
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(filterChain).doFilter(request, response);
+        verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        verify(response).setContentType(MediaType.APPLICATION_JSON_VALUE);
+        verify(objectMapper).writeValue(any(PrintWriter.class), argThat(response ->
+                response instanceof ApiResponse && !((ApiResponse<?>) response).isSuccess()
+        ));
+        verifyNoInteractions(filterChain);
     }
 }

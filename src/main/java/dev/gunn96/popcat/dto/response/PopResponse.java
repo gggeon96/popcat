@@ -4,6 +4,7 @@ import lombok.Builder;
 
 @Builder
 public record PopResponse(
-        long countAppend,
-        String newToken) {
+        Long countAppend,
+        String newToken,
+        Boolean isProcessed) {
 }

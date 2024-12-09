@@ -1,7 +1,6 @@
 package dev.gunn96.popcat.security.jwt;
 
-import dev.gunn96.popcat.service.GeoIpService;
-import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.ExpiredJwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -15,7 +14,6 @@ import java.util.Collections;
 @RequiredArgsConstructor
 public class JwtAuthenticationProvider implements AuthenticationProvider {
     private final JwtProvider jwtProvider;
-    private final GeoIpService geoIpService;
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
@@ -28,10 +26,12 @@ public class JwtAuthenticationProvider implements AuthenticationProvider {
         String ipAddress = jwtAuthentication.getIpAddress();
 
         try {
-            String regionCode = geoIpService.findRegionCodeByIpAddress(ipAddress);
-            TokenClaims claims = jwtProvider.validateToken(token, ipAddress, regionCode);
+            TokenClaims claims = jwtProvider.validateToken(token, ipAddress);
             return new JwtAuthenticationToken(claims, ipAddress, Collections.emptyList());
-        } catch (JwtException e) {
+        }
+        catch (ExpiredJwtException e) {
+            throw e;
+        } catch (Exception e) {
             throw new BadCredentialsException("Invalid JWT token", e);
         }
     }
