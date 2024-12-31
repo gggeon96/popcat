@@ -24,15 +24,10 @@ public class SecurityConfig {
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter(
-            AuthenticationConfiguration authConfig,
-            JwtProvider jwtProvider,
-            GeoIpService geoIpService,
-            ObjectMapper objectMapper) throws Exception {
-        return new JwtAuthenticationFilter(
-                authConfig.getAuthenticationManager(),
-                jwtProvider,
-                geoIpService,
-                objectMapper
+            AuthenticationConfiguration authConfig, JwtProvider jwtProvider,
+            GeoIpService geoIpService, ObjectMapper objectMapper) throws Exception {
+        return new JwtAuthenticationFilter(authConfig.getAuthenticationManager(),
+                jwtProvider, geoIpService, objectMapper
         );
     }
 
@@ -54,6 +49,7 @@ public class SecurityConfig {
                 )
                 .authenticationProvider(jwtAuthenticationProvider)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .securityMatcher("/api/v1/pop/**")
                 .build();
     }
 }

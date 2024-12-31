@@ -15,20 +15,27 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Set;
 
 
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final Set<String> SECURED_API_PATHS = Set.of(
+            "/api/v1/pop",
+            "/api/v1/pop/**"
+    );
 
     private final AuthenticationManager authenticationManager;
     private final JwtProvider jwtProvider;
     private final GeoIpService geoIpService;
     private final ObjectMapper objectMapper;
+    private final AntPathMatcher antPathMatcher = new AntPathMatcher();
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -95,5 +102,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return authorizationHeader.substring(BEARER_PREFIX.length());
         }
         return null;
+    }
+
+    //JwtFilter should be applied to /api/vi/pop endpoint
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return SECURED_API_PATHS.stream()
+                .noneMatch(pattern -> antPathMatcher.match(pattern, path));
     }
 }
